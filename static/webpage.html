@@ -1,0 +1,170 @@
+<!-- public/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/gh/zh-lx/pinyin-pro@latest/dist/pinyin-pro.js"></script>
+    <title>Translate multi-modally w/ Cloudflare AI</title>
+    <style>
+        body {
+            font-family: "Comic Sans MS", cursive, sans-serif;
+            background-color: #199360;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        h1 {
+            color: #333;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 80%;
+            max-width: 500px;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        textarea, input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 20px;
+        }
+        textarea {
+            height: 100px;
+            resize: none;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            font-size: 20px;
+            cursor: pointer;
+            margin-top: 10px;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #translationResult {
+            width: 100%;
+            padding: 10px;
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            font-size: 20px;
+        }
+        footer {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background-color: #5c2358;
+            color: #fff;
+            text-align: center;
+            padding: 10px 0;
+            font-size: 18px;
+        }
+        footer a {
+            color: #fff;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Multi-modal Translation w/ Cloudflare</h1>
+        <textarea id="langInput" placeholder="Enter target language (e.g., 'es' for Spanish)"></textarea>
+        <textarea id="textInput" placeholder="Enter text to translate or click Record Voice"></textarea>
+        <button id="translateButton">Translate</button>
+        <button id="recordButton">Record Voice</button>
+        <div id = "translationResult"></div>
+    </div>
+
+    <script>
+        var { pinyin } = pinyinPro;
+        function containsChineseCharacters(text) {
+            // Regular expression to match Chinese characters
+            const chineseCharacterRegex = /[\u4e00-\u9fff]/;
+            // Test the string against the regular expression
+            return chineseCharacterRegex.test(text);
+        }
+
+        function convertToPinyin(chineseText) {
+            let strToReturn = `${chineseText}: ${pinyin(chineseText)}`;
+            return strToReturn;
+        }
+
+        document.getElementById('translateButton').onclick = async function() {
+            const text = document.getElementById('textInput').value;
+            const targetLang = document.getElementById('langInput').value;
+            if (text.trim() === "" || targetLang.trim() === "") {
+                alert("Please enter both text and target language.");
+                return;
+            }
+            const response = await fetch('/translate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, targetLang })
+            });
+            const res = await response.json();
+            let str_res = JSON.stringify(res);
+
+            if (containsChineseCharacters(str_res)) {
+                str_res = convertToPinyin(str_res);
+            }
+
+            document.getElementById('translationResult').innerText = str_res;
+        };
+
+        document.getElementById('recordButton').onclick = function() {
+            startRecording();
+        };
+
+        //voice
+        function startRecording() {
+            if (!('webkitSpeechRecognition' in window)) {
+                alert("Your browser does not support speech recognition.");
+                return;
+            }
+
+            const recognition = new webkitSpeechRecognition();
+            recognition.lang = 'en-US';
+            recognition.onresult = async function(event) {
+                const transcript = event.results[0][0].transcript;
+                const targetLang = document.getElementById('langInput').value;
+                if (targetLang.trim() === "") {
+                    alert("Please enter the target language.");
+                    return;
+                }
+                const response = await fetch('/translate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text:transcript, targetLang })
+                });
+                const res = await response.json();
+                document.getElementById('translationResult').innerText = `${transcript}: ${JSON.stringify(res)}`;
+            };
+            recognition.onerror = function(event) {
+                console.error(event.error);
+                alert("Error occurred in recognition: " + event.error);
+            };
+            recognition.start();
+        }
+    </script>
+    <footer>
+        <p>Built w/ 🧡 in SF🌁 on <a href="https://workers.cloudflare.com/" target="_blank">Cloudflare Workers</a> with <a href="https://ai.cloudflare.com" target="_blank">Workers AI</a>👩🏻‍💻 ➡️ <a href="https://github.com/elizabethsiegle/cfworkers-ai-translate" target="_blank">code</a></p>
+    </footer>
+</body>
+</html>
